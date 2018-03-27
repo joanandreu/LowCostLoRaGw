@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with the program.  If not, see <http://www.gnu.org/licenses/>.
 #
-# v3.6 - image modification and need to incorporate aux_radio features
+# v3.8 - image modification and need to incorporate aux_radio features
 # + copy post-processing feature
 #------------------------------------------------------------
 
@@ -63,23 +63,24 @@ import libSMS
 
 
 #////////////////////////////////////////////////////////////
-# ADD HERE APP KEYS THAT YOU WANT TO ALLOW FOR YOUR GATEWAY
-#////////////////////////////////////////////////////////////
-# NOTE: the format of the application key list has changed from 
-# a list of list, to a list of string that will be process as 
-# a byte array. Doing so wilL allow for dictionary construction
-# using the appkey to retrieve information such as encryption key,...
-
-app_key_list = [
-	#change/add here your application keys
-	'\x01\x02\x03\x04',
-	'\x05\x06\x07\x08' 
-]
-
-#////////////////////////////////////////////////////////////
 
 #------------------------------------------------------------
-#header packet information
+#low-level data prefix
+#------------------------------------------------------------
+
+LL_PREFIX_1='\xFF'
+LL_PREFIX_LORA='\xFE'
+#add here other data prefix for other type of low-level radio gateway
+
+
+#list here other radio type
+LORA_RADIO=1
+
+#will be dynamically determined according to the second data prefix
+radio_type=LORA_RADIO
+
+#------------------------------------------------------------
+#LoRa header packet information
 #------------------------------------------------------------
 
 HEADER_SIZE=4
@@ -90,7 +91,7 @@ PKT_TYPE_ACK=0x20
 PKT_FLAG_ACK_REQ=0x08
 PKT_FLAG_DATA_ENCRYPTED=0x04
 PKT_FLAG_DATA_WAPPKEY=0x02
-PKT_FLAG_DATA_ISBINARY=0x01
+PKT_FLAG_DATA_DOWNLINK=0x01
 
 LORAWAN_HEADER_SIZE=13
 
@@ -193,8 +194,14 @@ except KeyError:
 	_wappkey = 0	
 	
 if _wappkey:
-	print "will enforce app key"		
-
+	print "will enforce app key"
+	print "importing list of app key"
+	try:
+		import key_AppKey
+	except ImportError:
+		print "no key_AppKey.py file"
+		_wappkey = 0
+		
 #------------------------------------------------------------
 #initialize gateway DHT22 sensor
 #------------------------------------------------------------
@@ -274,6 +281,7 @@ def dht22_target():
 #note that this feature is obsoleted by an option in the web admin interface to copy post-processing.log file on demand
 _gw_copy_post_processing=False
 
+#TODO: integrate copy post_processing feature into periodic status/tasks?
 def copy_post_processing():
 	print "extract last 500 lines of post-processing.log into /var/www/html/admin/log/post-processing-500L.log"
 	cmd="sudo tail -n 500 log/post-processing.log > /var/www/html/admin/log/post-processing-500L.log"
@@ -317,6 +325,16 @@ _gw_downlink_file = "downlink/downlink.txt"
 
 pending_downlink_requests = []
 
+#actually, periodic output for downlink may be not very convenient
+#as typical value for checking downlink is 1 to 5 minutes
+#so we disable it here
+_verbose_downlink=False
+
+#if we check every hour, then switch output on
+#you can also disable this behavior
+if _gw_downlink > 3600:
+	_verbose_downlink=True
+
 def check_downlink():
 
 	# - post_processing_gw.py checks and uses downlink/downlink_post.txt as input
@@ -324,9 +342,11 @@ def check_downlink():
 	# - valid requests will be appended to downlink/downlink-post_queued.txt
 	# - after reading downlink/downlink_post.txt, post_processing_gw.py deletes it
 	# - when a packet from device i is processed by post_processing_gw.py, it will check whether there is a queued message for i
-	# - if yes, then it generates a downlink/downlink.txt file with the queue message as content	
-	print datetime.datetime.now()
-	print "post downlink: checking for "+_post_downlink_file
+	# - if yes, then it generates a downlink/downlink.txt file with the queue message as content
+	
+	if _verbose_downlink:	
+		print datetime.datetime.now()
+		print "post downlink: checking for "+_post_downlink_file
 	
 	if os.path.isfile(os.path.expanduser(_post_downlink_file)):
 
@@ -360,15 +380,17 @@ def check_downlink():
 		os.remove(os.path.expanduser(_post_downlink_file))	
 		
 	else:
-		print "post downlink: no downlink requests"
+		if _verbose_downlink:
+			print "post downlink: no downlink requests"
 
-	print "post downlink: list of pending downlink requests"
+	if _verbose_downlink:
+		print "post downlink: list of pending downlink requests"
 	
-	if len(pending_downlink_requests) == 0:
-		print "None"
-	else:	
-		for downlink_request in pending_downlink_requests:
-			print downlink_request.replace('\n','')		
+		if len(pending_downlink_requests) == 0:
+			print "None"
+		else:	
+			for downlink_request in pending_downlink_requests:
+				print downlink_request.replace('\n','')		
 	
 def downlink_target():
 	while True:
@@ -378,7 +400,7 @@ def downlink_target():
 		time.sleep(_gw_downlink)
 		
 #------------------------------------------------------------
-#for sending periodic status
+#for doing periodic status/tasks
 #------------------------------------------------------------
 
 try:
@@ -389,21 +411,28 @@ except KeyError:
 if _gw_status < 0:
 	_gw_status = 0 
 
-if _gw_status:
-	try:
-		_gw_lat = json_array["gateway_conf"]["ref_latitude"]
-	except KeyError:
-		_gw_lat = "undef"
-	try:
-		_gw_long = json_array["gateway_conf"]["ref_longitude"]
-	except KeyError:
-		_gw_long = "undef"		
+# if _gw_status:
+# 	try:
+# 		_gw_lat = json_array["gateway_conf"]["ref_latitude"]
+# 	except KeyError:
+# 		_gw_lat = "undef"
+# 	try:
+# 		_gw_long = json_array["gateway_conf"]["ref_longitude"]
+# 	except KeyError:
+# 		_gw_long = "undef"		
 					
 def status_target():
 	while True:
 		print datetime.datetime.now()
-		print 'post status: gw ON, lat '+_gw_lat+' long '+_gw_long
-		sys.stdout.flush()
+		print 'post status: gw ON'
+		if _gw_downlink:
+			print 'post status: will check for downlink requests every %d seconds' % _gw_downlink
+		print 'post status: executing periodic tasks'
+		sys.stdout.flush()		
+		try:
+			os.system('python post_status_processing_gw.py')
+		except:
+			print "Error when executing post_status_processing_gw.py"			
 		global _gw_status
 		time.sleep(_gw_status)
 
@@ -716,8 +745,11 @@ if (_gw_downlink):
 			print downlink_request.replace('\n','')
 	else:
 		print "post downlink: none existing downlink-post-queued.txt"			
-	
-	print "Starting thread to check for downlink requests"
+
+	print "Loading lib to compute downlink MIC"
+	from loraWAN import loraWAN_get_MIC
+
+	print "Starting thread to check for downlink requests every %d seconds" % _gw_downlink
 	sys.stdout.flush()
 	t_downlink = threading.Thread(target=downlink_target)
 	t_downlink.daemon = True
@@ -726,7 +758,7 @@ if (_gw_downlink):
 
 #status feature
 if (_gw_status):
-	print "Starting thread to report gw status"
+	print "Starting thread to perform periodic gw status/tasks"
 	sys.stdout.flush()
 	t_status = threading.Thread(target=status_target)
 	t_status.daemon = True
@@ -734,6 +766,7 @@ if (_gw_status):
 	time.sleep(1)	
 	
 #copy post_processing feature
+#TODO: integrate copy post_processing feature into periodic status/tasks?
 	
 if (_gw_copy_post_processing):
 	print "Starting thread to copy post_processing.log"
@@ -815,8 +848,8 @@ while True:
 			ptypestr="N/A"
 			if ((ptype & 0xF0)==PKT_TYPE_DATA):
 				ptypestr="DATA"
-				if (ptype & PKT_FLAG_DATA_ISBINARY)==PKT_FLAG_DATA_ISBINARY:
-					ptypestr = ptypestr + " IS_BINARY"
+				if (ptype & PKT_FLAG_DATA_DOWNLINK)==PKT_FLAG_DATA_DOWNLINK:
+					ptypestr = ptypestr + " DOWNLINK"
 				if (ptype & PKT_FLAG_DATA_WAPPKEY)==PKT_FLAG_DATA_WAPPKEY:
 					ptypestr = ptypestr + " WAPPKEY"
 				if (ptype & PKT_FLAG_DATA_ENCRYPTED)==PKT_FLAG_DATA_ENCRYPTED:
@@ -824,7 +857,7 @@ while True:
 				if (ptype & PKT_FLAG_ACK_REQ)==PKT_FLAG_ACK_REQ:
 					ptypestr = ptypestr + " ACK_REQ"														
 			if ((ptype & 0xF0)==PKT_TYPE_ACK):
-				ptypestr="ACK"					
+				ptypestr="ACK"
 			src=arr[2]
 			seq=arr[3]
 			datalen=arr[4]
@@ -848,18 +881,41 @@ while True:
 					else:
 						print "in unicast mode"	
 					print "post downlink: downlink data is \"%s\"" % request_json["data"]
-					print "post downlink: generate "+_gw_downlink_file
-					print downlink_request
+					print "post downlink: generate "+_gw_downlink_file+" from entry"
+					print downlink_request.replace('\n','')
+					
+					#generate the MIC corresponding to the clear data and the destination device address
+					#it is possible to have a broadcast address but since the only device that is listening 
+					#is the one that has sent a packet, there is little interest in doing so
+					#so currently, we use the sending device's address to compute the MIC
+					MIC=loraWAN_get_MIC(src,request_json["data"])
+					#add the 4 byte MIC information into the json line
+					request_json['MIC0']=hex(MIC[0])
+					request_json['MIC1']=hex(MIC[1])
+					request_json['MIC2']=hex(MIC[2])
+					request_json['MIC3']=hex(MIC[3])
+					
+					downlink_json=[]
+					downlink_json.append(request_json)
+					
 					f = open(os.path.expanduser(_gw_downlink_file),"a")
-					f.write(downlink_request)
+					
+					print "post downlink: write"
+					for downlink_json_line in downlink_json:
+						#print downlink_json_line
+						print json.dumps(downlink_json_line)
+						f.write(json.dumps(downlink_json_line)+'\n')
+					
 					f.close()
+					
 					pending_downlink_requests.remove(downlink_request)
+					
 					#update downlink-post-queued.txt
 					f = open(os.path.expanduser(_post_downlink_queued_file),"w")
 					for downlink_request in pending_downlink_requests:
 						f.write("%s" % downlink_request)
 					#TODO: should we write all pending request for this node
-					#or only the first one?
+					#or only the first one that we found?
 					#currently, we do only the first one					
 					break;
 	
@@ -963,7 +1019,7 @@ while True:
 						cloud_script=_enabled_clouds[cloud_index]
 						print "uploading with "+cloud_script
 						sys.stdout.flush()
-						cmd_arg=cloud_script+" \""+ldata.replace('\n','')+"\""+" \""+pdata.replace('\n','')+"\""+" \""+rdata.replace('\n','')+"\""+" \""+tdata.replace('\n','')+"\""+" \""+_gwid.replace('\n','')+"\""
+						cmd_arg=cloud_script+" \""+ldata.replace('\n','').replace('\0','')+"\""+" \""+pdata.replace('\n','')+"\""+" \""+rdata.replace('\n','')+"\""+" \""+tdata.replace('\n','')+"\""+" \""+_gwid.replace('\n','')+"\""
 					except UnicodeDecodeError, ude:
 						print ude
 					else:
@@ -992,19 +1048,18 @@ while True:
 
 		continue
 	
-	#handle binary prefixes
-	#if (ch == '\xFF' or ch == '+'):
-	if (ch == '\xFF'):
+	#handle low-level gateway data
+	if (ch == LL_PREFIX_1):
 	
 		print "got first framing byte"
 		ch=getSingleChar()	
 		
-		#data prefix for non-encrypted data
-		#if (ch == '\xFE' or ch == '+'):			
-		if (ch == '\xFE'):
+		#data from low-level LoRa gateway?		
+		if (ch == LL_PREFIX_LORA):
 			#the data prefix is inserted by the gateway
 			#do not modify, unless you know what you are doing and that you modify lora_gateway (comment WITH_DATA_PREFIX)
-			print "--> got data prefix"
+			print "--> got LoRa data prefix"
+			radio_type=LORA_RADIO
 			
 			#if SNR < -20:
 			#	print "--> SNR too low, discarding data"
@@ -1023,7 +1078,7 @@ while True:
 			#if we have raw output from gw, then try to determine which kind of packet it is
 			#
 			if (_rawFormat==1):
-				print "raw format from gateway"
+				print "raw format from LoRa gateway"
 				ch=getSingleChar()
 				
 				#probably our modified Libelium header where the destination (i.e. 1) is the gateway
@@ -1184,7 +1239,12 @@ while True:
 							#	print plain_payload
 							_linebuf = plain_payload
 							_has_linebuf=1
-							_hasClearData=1						
+							_hasClearData=1
+							
+							#remove the data encrypted flag
+							ptype = ptype & (~PKT_FLAG_DATA_ENCRYPTED)
+							pdata="%d,%d,%d,%d,%d,%d,%d" % (dst,ptype,src,seq,datalen,SNR,RSSI)	
+							print '--> changed packet type to clear data' 					
 						
 				else:
 						print "--> DATA encrypted: local aes not activated"
@@ -1235,19 +1295,17 @@ while True:
 				
 				print "app key is ",
 				print " ".join("0x{:02x}".format(ord(c)) for c in the_app_key)
-				
-				if the_app_key in app_key_list:
-					print "in app key list"
-					if _wappkey==1:
+
+				if _wappkey==1:
+					if the_app_key in key_AppKey.app_key_list:
+						print "in app key list"				
 						_validappkey=1
-				else:		
-					print "not in app key list"
-					if _wappkey==1:
+					else:
+						print "not in app key list"
 						_validappkey=0
-					else:	
-						#we do not check for app key
-						_validappkey=1
-						print "but app key disabled"				
+				else:
+					print "app key disabled"
+					_validappkey=1				
 				
 			continue	
 					

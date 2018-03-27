@@ -1,6 +1,6 @@
 ####################################################
 #server: CAUTION must exist
-orion_server="http://18.194.211.208:80/api/v1"
+orion_server="http://broker.waziup.io/v2"
 
 #project name
 project_name="waziup"
@@ -11,25 +11,22 @@ project_name="waziup"
 organization_name="ORG"
 
 #service tree: CHANGE HERE at your convenience
-#should start with -
-#service_tree='-LIUPPA-T2I-CPHAM'
+#should start with /
+#service_tree='/LIUPPA/T2I/CPHAM'
 #can be empty
-#service_tree=''
-service_tree='-TESTS'
+service_tree=''
 
 #sensor name: CHANGE HERE but maybe better to leave it as Sensor
 #the final name will contain the sensor address
 sensor_name="Sensor"
 
 #service path: DO NOT CHANGE HERE
-service_path='-'+organization_name+service_tree
+service_path='/'+organization_name+service_tree
 
 #SUMMARY
 #the Fiware-Service will be project_name, e.g. "waziup"
 #
-#the Fiware-ServicePath will be service_path which is based on both organization_name and service_tree, e.g. "-UPPA-TESTS"
-#
-#with a domain vision, the domain will be project_name+service_path, e.g waziup-UPPA-TESTS
+#the Fiware-ServicePath will be service_path which is based on both organization_name and service_tree, e.g. "/UPPA/LIUPPA/T2I/CPHAM"
 #
 #the entity name will then be organization_name+"_"+sensor_name+scr_addr, e.g. "UPPA_Sensor2"
 #

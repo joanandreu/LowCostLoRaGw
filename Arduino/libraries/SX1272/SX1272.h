@@ -57,7 +57,7 @@
 //we take pin 4 as it is available on many boards
 #define SX1272_RST  4
 
-#ifdef ARDUINO_AVR_FEATHER32U4 || defined ARDUINO_SAMD_FEATHER_M0
+#if defined ARDUINO_AVR_FEATHER32U4 || defined ARDUINO_SAMD_FEATHER_M0
 // on the Adafruit Feather, the RFM95W is embeded and CS pin is normally on pin 8
 #define SX1272_SS 8
 #elif defined ARDUINO_ESP8266_ESP01
@@ -422,10 +422,12 @@ struct pack
  	*/
 	uint8_t length;
 
+    // modified by C. Pham
+    // use a pointer instead of static variable to same memory footprint
 	//! Structure Variable : Packet payload
 	/*!
  	*/
-	uint8_t data[MAX_PAYLOAD];
+    uint8_t* data;
 
     // modified by C. Pham
     // will not be used in the transmitted packet
@@ -1176,7 +1178,10 @@ public:
     void RxChainCalibration();
     uint8_t doCAD(uint8_t counter);
     uint16_t getToA(uint8_t pl);
-    void CarrierSense();
+    void CarrierSense(uint8_t cs=1);
+    void CarrierSense1();
+    void CarrierSense2();
+    void CarrierSense3(); 
     int8_t setSyncWord(uint8_t sw);
     int8_t getSyncWord();
     int8_t setSleepMode();
@@ -1185,11 +1190,13 @@ public:
     long getRemainingToA();
     long removeToA(uint16_t toa);
     int8_t setFreqHopOn();
+    void setCSPin(uint8_t cs);
 
     // SX1272 or SX1276?
     uint8_t _board;
     uint8_t _syncWord;
     uint8_t _defaultSyncWord;
+    uint8_t _SX1272_SS;
     unsigned long _starttime;
     unsigned long _stoptime;
     unsigned long _startDoCad;
@@ -1392,6 +1399,12 @@ public:
   	/*!
    	*/
 	pack ACK;
+
+    //! Structure Variable : Packet payload
+    /*!
+    */
+    uint8_t packet_data[MAX_PAYLOAD];
+    uint8_t ack_data[2];
 
 	//! Variable : temperature module.
 	//!
