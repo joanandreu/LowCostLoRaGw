@@ -1,5 +1,5 @@
 #change here for your own firebase url when you have one
-firebase_database='https://XXXXXXXXXXX.firebaseio.com'
+firebase_database='https://loramarine-77bf7.firebaseio.com'
 
 #Note how we can indicate a device source addr that are allowed to use the script
 #Use decimal between 2-255 and use 4-byte hex format for LoRaWAN devAddr

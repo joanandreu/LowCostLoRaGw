@@ -50,7 +50,7 @@
 			"name":"ThingSpeak cloud",
 			"script":"python CloudThingSpeak.py",
 			"type":"iotcloud",			
-			"enabled":true
+			"enabled":false
 		},
 		{	
 			"name":"NodeRed flow",
@@ -75,6 +75,18 @@
 			"script":"python CloudFireBase.py",
 			"type":"jsoncloud",			
 			"enabled":false
+		},
+				{	
+			"name":"Firebase cloud1",
+			"script":"python CloudFireBase1.py",
+			"type":"jsoncloud",			
+			"enabled":true
+		},
+				{	
+			"name":"Firebase cloud2",
+			"script":"python CloudFireBase2.py",
+			"type":"jsoncloud",			
+			"enabled":true
 		},		
 		{	
 			"name":"example template",
